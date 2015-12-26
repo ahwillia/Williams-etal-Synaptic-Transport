@@ -51,8 +51,11 @@ WORKDIR $HOME
 RUN git clone https://github.com/jakevdp/JSAnimation.git
 RUN python JSAnimation/setup.py install
 
-
 ENV PYTHONPATH $PYTHONPATH:$HOME/JSAnimation/:$HOME/PyNeuron-Toolbox/
+
+# Add NEURON to path
+# TODO: detect "x86_64" somehow?
+ENV PATH $HOME/neuron/nrn-7.4/x86_64/bin:$PATH
 
 # Switch back to non-root user privledges
 WORKDIR $HOME
