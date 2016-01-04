@@ -1,3 +1,0 @@
-ffmpeg -i Video_u.mp4 -vf "[in] scale=iw/2:ih/2, pad=1.5*iw:ih [left]; 
-    movie=Video_ustar.mp4, scale=iw/2:ih/2, fade=out:300:30:alpha=1 [right]; 
-    [left][right] overlay=main_w/2:0 [out]" -b:v 768k Output.mp4
