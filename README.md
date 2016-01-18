@@ -1,6 +1,6 @@
 [![Binder](http://mybinder.org/badge.svg)](http://mybinder.org/repo/ahwillia/Williams-etal-Synaptic-Transport)
 
-# A fundamental speed-precision tradeoff for trafficked subcellular cargo
+# Dendritic trafficking faces fundamental speed-precision tradeoffs
 
 [Alex H. Williams](http://alexhwilliams.info/)\*, [Cian O'Donnell](http://www.snl.salk.edu/~cian/Cian_ODonnell/Cian_ODonnell.html), [Terrence Sejnowski](http://cnl.salk.edu/), [Timothy O'Leary](http://www.drtimothyoleary.com/)\*
 
