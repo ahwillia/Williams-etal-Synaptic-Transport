@@ -8,6 +8,6 @@
 
 ### Try it out
 
-Thanks to [the Binder Project](http://mybinder.org/), you can try out our simulations by clicking the badge at the top of this page or by following [**this link**](http://mybinder.org/repo/ahwillia/Williams-etal-Synaptic-Transport).
+Thanks to [the Binder Project](http://mybinder.org/), you can try out our simulations by clicking the badge at the top of this page or by following [**this link**](http://mybinder.org/repo/ahwillia/Williams-etal-Synaptic-Transport). To reproduce the figures on your own computer &mdash; follow the procedure outlined in the [Dockerfile](https://github.com/ahwillia/Williams-etal-Synaptic-Transport/blob/master/Dockerfile).
 
 ***Note:*** we've decreased the temporal resolution on many simulations so that our results can be reproduced relatively quickly. These parameters can be easily changed by the user.
