@@ -8,6 +8,8 @@ from scipy.linalg import expm  # matrix exponential used to solve linear system
 import pylab as plt
 from matplotlib import animation
 from matplotlib.pyplot import cm
+from copy import copy
+from PyNeuronToolbox import morphology
 np.random.seed(123456789)
 
 ## Get a list of segments
@@ -93,7 +95,7 @@ def sushi_system(h,a,b,c):
 
 def set_trafficking_rates(h, utarg, diff_coeff):
     """
-    (a+b) = 2 * diff_coeff / dist_between(p,i)
+    (a+b) = 2 * diff_coeff / (dist_between(p,i)**2)
     """
     N = len(utarg)
     a,b = [],[]
@@ -210,15 +212,59 @@ def save_movie(h, t, u, view, filename, clim=[0,2]):
     #anim.save('./anim/'+filename+'.mp4', fps=30)
     return anim
 
-def run_sims(h,cellname,view):
-    diff_coeff = 4.0 
-    for cscale in [1e-2,1e-3,1e-4,1e-5,1e-6]:
-        A,u,t,err = run_uniform_sim(h, cscale, diff_coeff)
-        return A,u,t,err
-        # N = A.shape[0]/2
+def calc_tradeoff_curve(h, diff_coeff=4.0):
+    N = get_nsegs(h)
+    a,b = set_trafficking_rates(h, np.ones(N), diff_coeff)
+    y = np.ones(N)/N
+    u0 = np.zeros(N*2)
+    u0[0] = 1.0
 
-        # filename = cellname+'_1e'+str(int(np.log10(cscale)))
-        # plot_steady_state(A, filename, view)
-        # anim = save_movie(h, t, u[:,:N], view, filename+'_belt')
-        # return anim
-        #save_movie(h, t, u[:,N:], view, filename+'_detached')
+    tau,err = [],[]
+    tss = 0 # initial lower bound
+    for detach_ts in np.logspace(-2,-6,20):
+        c = list(np.ones(N)*detach_ts)
+        Abelt,A = sushi_system(h,copy(a),copy(b),c)
+        tss = calc_timescale(A,u0,lower_bound=tss/2)
+        uss = np.dot(expm(A*10*tss),u0) # steady-state profile
+        err.append(100*np.mean(np.abs((y-uss[N:])/y)))
+        tau.append(tss/60)
+    
+    return np.array([ [t,er] for er,t in zip(err,tau) ])
+
+def calc_timescale(A,u0,lower_bound=0, perc_error=0.05,tol=1.0):
+    # calculate number of seconds to reach steady-state (within perc_error)
+    N = get_nsegs(h)
+    upper_bound = 1e10
+    lower_bound = 0
+    while (upper_bound-lower_bound)>tol:
+        tt = lower_bound + (upper_bound-lower_bound)/2
+        u = np.dot(expm(A*tt),u0)
+        if np.sum(u[:N]) > perc_error:
+            # not converged to steady-state
+            lower_bound = tt
+        else:
+            # converged to within perc_error of steady-state
+            upper_bound = tt
+    return lower_bound + (upper_bound-lower_bound)/2
+
+def snapshots(h,u,t,cellname,view):
+    xsc = np.array([0,100])
+    ysc = np.array([0,0])
+    N = int(u.shape[1]/2)
+
+    fig = plt.figure()
+    ax = fig.gca(projection='3d')
+    ax.view_init(*view)
+        
+    ix = [2,5,11,23]
+
+    for i in ix:
+        plt.cla()
+        ax.set_axis_off()
+        morphology.shapeplot(h, ax, clim=[0,2], cvals=u[i,:N],cmap=cm.cool)
+        ax.plot(xsc+90,ysc+200,'-r',lw=2)
+        plt.title(t[i])
+        plt.savefig('./plots/'+cellname+'_t_'+str(int(t[i]))+'.eps')
+        plt.savefig('./plots/'+cellname+'_t_'+str(int(t[i]))+'.png')
+
+    plt.close()
