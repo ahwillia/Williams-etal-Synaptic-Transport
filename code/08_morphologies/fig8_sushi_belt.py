@@ -10,7 +10,6 @@ from matplotlib import animation
 from matplotlib.pyplot import cm
 from copy import copy
 from PyNeuronToolbox import morphology
-np.random.seed(123456789)
 
 ## Get a list of segments
 from PyNeuronToolbox.morphology import shapeplot,allsec_preorder,root_indices,shapeplot_animate
@@ -21,7 +20,7 @@ def get_nsegs(h):
         N += sec.nseg
     return int(N)
 
-def sushi_system(h,a,b,c):
+def sushi_system(h,a,b,c,d=None):
     """
     Returns a matrix A, such that dx/dt = A*x
     
@@ -83,24 +82,28 @@ def sushi_system(h,a,b,c):
             child_list.reverse()
         for c_sec in child_list:
             parentStack.append([i-1,c_sec]) # append parent index and child
-    
-    Abelt = np.copy(A[:N,:N])
 
     # Detachment off the belt
     for i in range(N):
         A[i,i] += -c[i]
         A[i+N,i] += c[i]
-    
-    return Abelt, A
 
-def set_trafficking_rates(h, utarg, diff_coeff):
+    # Reattachment to belt
+    if d is not None:
+        for i in range(N):
+            A[i,i+N] += d[i]
+            A[i+N,i+N] += -d[i]
+    
+    return A
+
+def set_uniform_rates(h, diff_coeff):
     """
     (a+b) = 2 * diff_coeff / (dist_between(p,i)**2)
+    (c+d) = 2 * diff_coeff * compartment_size
     """
-    N = len(utarg)
-    a,b = [],[]
+    a,b,c,d = [],[],[],[]
     sec_list = allsec_preorder(h)
-    
+
     # Iterative traversal of dendritic tree in pre-order
     i = 0
     parentStack = [(None,None,sec_list[0])]
@@ -108,25 +111,23 @@ def set_trafficking_rates(h, utarg, diff_coeff):
         # Get next section to traverse
         #  --> p is parent index, section is h.Section object
         (p,psize,section) = parentStack.pop()
-        secsize = section.L / section.nseg
+        segsize = section.L / section.nseg
         
         # Trafficking to/from parent
         if p is not None:
-            mp = utarg[p] # concentration in parent
-            mc = utarg[i] # concentration in child
-            limit = 2.0 * diff_coeff / ((0.5*(psize+secsize))**2)
-            a.insert(0, limit / (1.0 + mp/mc) )
-            b.insert(0, limit / (1.0 + mc/mp) )
+            a.insert(0, diff_coeff / ((0.5*(psize+segsize))**2) )
+            b.insert(0, diff_coeff / ((0.5*(psize+segsize))**2) )
         
         # visit all segments in section
         for (j,seg) in enumerate(section):
-            # Deal with out/into rates within compartment, just tridiag matrix
+            # detachment and reattachment
+            c.insert(0, diff_coeff * segsize)
+            d.insert(0, diff_coeff * segsize)
+
+            # trafficking rates within compartment, just tridiag matrix
             if j>0:
-                mp = utarg[i-1]
-                mc = utarg[i]
-                limit = 2.0 * diff_coeff / (secsize**2)
-                a.insert(0, limit / (1.0 + mp/mc) )
-                b.insert(0, limit / (1.0 + mc/mp) )
+                a.insert(0, diff_coeff / (segsize**2) )
+                b.insert(0, diff_coeff / (segsize**2) )
                 
             # move onto next compartment
             i += 1
@@ -136,23 +137,42 @@ def set_trafficking_rates(h, utarg, diff_coeff):
         if child_list is not None:
             child_list.reverse() # needed to visit children in correct order
         for c_sec in child_list:
-            parentStack.append((i-1,secsize,c_sec)) # append parent index and child
+            parentStack.append((i-1,segsize,c_sec)) # append parent index and child
 
-    return a,b
+    return a,b,c,d
 
-def run_uniform_sim(h, cscale, diff_coeff, belt_only=False, **kwargs):
+def run_uniform_reattachment(h, dscale, diff_coeff, **kwargs):
+    # get trafficking rates (no reattachment)
     N = get_nsegs(h)
-    a,b = set_trafficking_rates(h, np.ones(N), diff_coeff)
+    a,b,c,_ = set_uniform_rates(h, diff_coeff)    
+    d = [ ci*dscale for ci in c ]
+
+    # get state-transition matrix
+    A = sushi_system(h,a,b,c,d)
+    u,t = run_sim(h,A,**kwargs)
+
+    # calculate excess % of cargo left on microtuble
+    total_cargo = np.sum(u[0,:])
+    excess = 100*np.sum(u[:,:N],axis=1)/total_cargo
+    
+    return A,u,t,list(excess)
+
+def run_uniform_sim(h, cscale, diff_coeff, **kwargs):
+
+    # get trafficking rates (no reattachment)
+    N = get_nsegs(h)
+    a,b,_,_ = set_uniform_rates(h, diff_coeff)    
     c = list(np.ones(N)*cscale)
-    Abelt,A = sushi_system(h,a,b,c)
-    if belt_only:
-        u,t = run_sim(h,Abelt,**kwargs)
-        return Abelt,u,t
-    else:
-        u,t = run_sim(h,A,**kwargs)
-        targ = np.sum(u[0,:])/N
-        err = 100*np.mean( np.abs(u[:,N:] - targ ) / targ ,axis=1)
-        return A,u,t,list(err)
+
+    # get state-transition matrix
+    A = sushi_system(h,a,b,c)
+    u,t = run_sim(h,A,**kwargs)
+
+    # calculate error
+    targ = np.sum(u[0,:])/N
+    err = 100*np.mean( np.abs(u[:,N:] - targ ) / targ ,axis=1)
+    
+    return A,u,t,list(err)
 
 def run_sim(h, A, t0=2e1, tmax=5e7, dt=2):
     u0 = np.zeros(A.shape[0])
@@ -167,30 +187,6 @@ def run_sim(h, A, t0=2e1, tmax=5e7, dt=2):
         u.append(np.dot(expm(t[-1]*A),u0))
     
     return np.array(u),np.array(t)
-
-def plot_steady_state(A,filename,view,tol=0.1):
-    tss = 1e6
-    N = int(A.shape[0]/2)
-    u0 = np.zeros(N*2)
-    u0[0] = N
-    u = np.dot(expm(tss*A),u0)
-    while np.sum(u[N:])<(N*(1-tol)):
-        tss *= 10
-        u = np.dot(expm(tss*A),u0)
-
-    np.savetxt('./data/'+filename, u[N:])
-
-    fig = plt.figure()
-    ax = fig.gca(projection='3d')
-    clim = [0,2]
-    shapeplot(h, ax, cvals=u[N:], cmap=plt.cm.cool, clim=clim)
-    ax.view_init(*view)
-    ax.set_axis_off()
-    sm = plt.cm.ScalarMappable(cmap=plt.cm.cool, norm=plt.Normalize(clim[0],clim[1])) 
-    sm._A = []
-    plt.colorbar(sm, shrink=0.5)
-    plt.tight_layout()
-    plt.savefig('./plots/'+filename+'.png')
 
 def save_movie(h, t, u, view, filename, clim=[0,2]):
     # Make an animation
@@ -212,9 +208,9 @@ def save_movie(h, t, u, view, filename, clim=[0,2]):
     #anim.save('./anim/'+filename+'.mp4', fps=30)
     return anim
 
-def calc_tradeoff_curve(h, diff_coeff=4.0):
+def calc_tradeoff_curve(h, diff_coeff=10.0):
     N = get_nsegs(h)
-    a,b = set_trafficking_rates(h, np.ones(N), diff_coeff)
+    a,b,c,_ = set_uniform_rates(h, diff_coeff)
     y = np.ones(N)/N
     u0 = np.zeros(N*2)
     u0[0] = 1.0
@@ -223,31 +219,75 @@ def calc_tradeoff_curve(h, diff_coeff=4.0):
     tss = 0 # initial lower bound
     for detach_ts in np.logspace(-2,-6,20):
         c = list(np.ones(N)*detach_ts)
-        Abelt,A = sushi_system(h,copy(a),copy(b),c)
-        tss = calc_timescale(A,u0,lower_bound=tss/2)
+        A = sushi_system(h,copy(a),copy(b),c)
+        tss = calc_time_to_ss(A,u0,lower_bound=tss/2)
         uss = np.dot(expm(A*10*tss),u0) # steady-state profile
         err.append(100*np.mean(np.abs((y-uss[N:])/y)))
         tau.append(tss/60)
     
-    return np.array([ [t,er] for er,t in zip(err,tau) ])
+    return np.array([ [t,er] for t,er in zip(tau,err) ])
 
-def calc_timescale(A,u0,lower_bound=0, perc_error=0.05,tol=1.0):
-    # calculate number of seconds to reach steady-state (within perc_error)
+def calc_tradeoff_reattachment(h, diff_coeff=10.0):
+    N = get_nsegs(h)
+    a,b,c,_ = set_uniform_rates(h, diff_coeff)
+    y = np.ones(N)/N
+    u0 = np.zeros(N*2)
+    u0[0] = 1.0
+
+    tau,excess = [],[]
+    tss = 0 # initial lower bound
+    for ds in np.logspace(2,-2,20):
+        d = [ ci*ds for ci in c ]
+        A = sushi_system(h,copy(a),copy(b),c,d)
+        tss = calc_time_to_ss_reattachment(A,u0,lower_bound=tss/2)
+        uss = np.dot(expm(A*10*tss),u0) # steady-state profile
+        excess.append(100*(np.sum(uss[:N])/np.sum(uss)))
+        tau.append(tss/60)
+    
+    return np.array([ [t,exc] for t,exc in zip(tau,excess) ])
+
+def calc_time_to_ss(A,u0,lower_bound=0,perc_ss=0.05,tol=1.0):
+    """ Calculate number of seconds to reach steady-state (within perc_ss)
+    """
     N = get_nsegs(h)
     upper_bound = 1e10
-    lower_bound = 0
     while (upper_bound-lower_bound)>tol:
         tt = lower_bound + (upper_bound-lower_bound)/2
         u = np.dot(expm(A*tt),u0)
-        if np.sum(u[:N]) > perc_error:
+        if np.sum(u[:N]) > perc_ss:
             # not converged to steady-state
             lower_bound = tt
         else:
-            # converged to within perc_error of steady-state
+            # converged to within perc_ss of steady-state
             upper_bound = tt
     return lower_bound + (upper_bound-lower_bound)/2
 
-def snapshots(h,u,t,cellname,view):
+def calc_time_to_ss_reattachment(A,u0,perc_ss=0.1,bound_tol=1.0,lower_bound=0):
+    """ Calculate number of seconds to reach steady-state (within perc_ss)
+    """
+    N = get_nsegs(h)
+    upper_bound = 1e10
+
+    uss = np.dot(expm(A*upper_bound),u0)
+    sum_uss = np.sum(uss[N:])
+
+    tt = 1.0
+    u = np.dot(expm(A*tt),u0)
+    upper_bound,lower_bound = 1e10,0.0
+    while (upper_bound - lower_bound) > bound_tol:
+        tt = lower_bound + (upper_bound-lower_bound)/2
+        u = np.dot(expm(A*tt),u0)
+        if np.max((u-uss)/uss) > perc_ss:
+            # not converged to steady-state
+            lower_bound = tt
+        else:
+            # converged to steady-state
+            upper_bound = tt
+    tss = lower_bound + (upper_bound-lower_bound)/2
+    return tss
+
+
+def snapshots(h,u,t,folder,cellname,view,u_cmap,us_cmap):
     xsc = np.array([0,100])
     ysc = np.array([0,0])
     N = int(u.shape[1]/2)
@@ -255,16 +295,22 @@ def snapshots(h,u,t,cellname,view):
     fig = plt.figure()
     ax = fig.gca(projection='3d')
     ax.view_init(*view)
-        
-    ix = [2,5,11,23]
 
-    for i in ix:
+    for i in xrange(len(t)):
         plt.cla()
         ax.set_axis_off()
-        morphology.shapeplot(h, ax, clim=[0,2], cvals=u[i,:N],cmap=cm.cool)
-        ax.plot(xsc+90,ysc+200,'-r',lw=2)
+        morphology.shapeplot(h, ax, clim=[0,2], cvals=u[i,:N],cmap=u_cmap)
+        #ax.plot(xsc,ysc,'-r',lw=2)
+        #ax.plot(ysc,xsc,'-r',lw=2)
         plt.title(t[i])
-        plt.savefig('./plots/'+cellname+'_t_'+str(int(t[i]))+'.eps')
-        plt.savefig('./plots/'+cellname+'_t_'+str(int(t[i]))+'.png')
+        plt.savefig('./'+folder+'/'+cellname+'_u_t_'+str(int(i))+'.eps')
+
+        plt.cla()
+        ax.set_axis_off()
+        morphology.shapeplot(h, ax, clim=[0,2], cvals=u[i,N:],cmap=us_cmap)
+        #ax.plot(xsc,ysc,'-r',lw=2)
+        #ax.plot(ysc,xsc,'-r',lw=2)
+        plt.title(t[i])
+        plt.savefig('./'+folder+'/'+cellname+'_us_t_'+str(int(i))+'.eps')
 
     plt.close()
