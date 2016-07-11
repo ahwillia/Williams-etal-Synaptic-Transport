@@ -1,6 +1,8 @@
 .dropbox
 /*/*/*.mp4
 /*/*/*.svg
+/*/*/*.eps
+/*/*/*.png
 /*/*/.ipynb_checkpoints/*
 /*/*/*/.ipynb_checkpoints/*
 /*/*/x86_64/*
