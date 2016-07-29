@@ -171,8 +171,9 @@ def run_uniform_sim(h, cscale, diff_coeff, **kwargs):
     # calculate error
     targ = np.sum(u[0,:])/N
     err = 100*np.mean( np.abs(u[:,N:] - targ ) / targ ,axis=1)
-    
-    return A,u,t,list(err)
+    final_err = u[-1,N:]-targ
+
+    return A,u,t,list(err),final_err
 
 def run_sim(h, A, t0=2e1, tmax=5e7, dt=2):
     u0 = np.zeros(A.shape[0])
