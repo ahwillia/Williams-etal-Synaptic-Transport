@@ -9,9 +9,9 @@
 /*/*/*/x86_64/*
 figs/
 latex/
-/code/hidden
-/code/08_morphologies/plots
-/code/08_morphologies/anim
+/results/07/plots
+/results/07/anim
+/results/misc
 /first-submission
 /resubmission
 *.doc
