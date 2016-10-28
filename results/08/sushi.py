@@ -99,6 +99,7 @@ def sushi_system(h,a,b,c,d=None):
 def set_uniform_rates(h, diff_coeff):
     """
     (a+b) = 2 * diff_coeff / (dist_between(p,i)**2)
+    (c+d) = 2 * diff_coeff * compartment_size
     """
     a,b,c,d = [],[],[],[]
     sec_list = allsec_preorder(h)
@@ -120,8 +121,8 @@ def set_uniform_rates(h, diff_coeff):
         # visit all segments in section
         for (j,seg) in enumerate(section):
             # detachment and reattachment
-            c.insert(0, diff_coeff)
-            d.insert(0, diff_coeff)
+            c.insert(0, diff_coeff * segsize)
+            d.insert(0, diff_coeff * segsize)
 
             # trafficking rates within compartment, just tridiag matrix
             if j>0:
@@ -183,7 +184,7 @@ def run_sim(h, A, t0=2e1, tmax=5e7, dt=2):
     N = float(A.shape[0]/2)
     roots = root_indices(allsec_preorder(h))
     for r in roots: 
-        u0[r] = N / len(roots)
+        u0[r] = 1.0 / len(roots)
     u = [u0,np.dot(expm(t0*A),u0)]
     t = [0,t0]
     while t[-1] < tmax:
@@ -254,7 +255,8 @@ def calc_tradeoff_reattachment(h, diff_coeff=10.0):
 def calc_time_to_ss(A,u0,lower_bound=0,perc_ss=0.1,tol=1.0):
     """ Calculate number of seconds to reach steady-state (within perc_ss)
     """
-    N = get_nsegs(h)
+    N = int(len(u0)/2)
+    np.testing.assert_approx_equal(np.sum(u0),1.0)
     upper_bound = 1e10
     while (upper_bound-lower_bound)>tol:
         tt = lower_bound + (upper_bound-lower_bound)/2
@@ -271,14 +273,14 @@ def calc_time_to_ss_reattachment(A,u0,perc_ss=0.1,bound_tol=1.0,lower_bound=0):
     """ Calculate number of seconds to reach steady-state (within perc_ss)
     """
     N = get_nsegs(h)
-    upper_bound,lower_bound = 1e10,0.0
+    upper_bound = 1e10
 
     uss = np.dot(expm(A*upper_bound),u0)
     sum_uss = np.sum(uss[N:])
 
     tt = 1.0
     u = np.dot(expm(A*tt),u0)
-
+    upper_bound,lower_bound = 1e10,0.0
     while (upper_bound - lower_bound) > bound_tol:
         tt = lower_bound + (upper_bound-lower_bound)/2
         u = np.dot(expm(A*tt),u0)
