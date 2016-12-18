@@ -51,6 +51,9 @@ WORKDIR $HOME
 RUN git clone https://github.com/jakevdp/JSAnimation.git
 RUN python JSAnimation/setup.py install
 
+# Install other requirements
+RUN pip install palettable
+
 ENV PYTHONPATH $PYTHONPATH:$HOME/JSAnimation/:$HOME/PyNeuron-Toolbox/
 
 # Add NEURON to path
