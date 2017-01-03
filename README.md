@@ -5,7 +5,7 @@
 [Alex H. Williams](http://alexhwilliams.info/)\*, [Cian O'Donnell](http://www.snl.salk.edu/~cian/Cian_ODonnell/Cian_ODonnell.html), [Terrence Sejnowski](http://cnl.salk.edu/), [Timothy O'Leary](http://www.drtimothyoleary.com/)\*
 *eLife. Dec 2016. 5:e20556.*
 
-Link to paper: http://dx.doi.org/10.7554/eLife.20556*
+Link to paper: http://dx.doi.org/10.7554/eLife.20556
 
 *Address correspondence to alex.h.willia@gmail.com and timothy.oleary@eng.cam.ac.uk
 
